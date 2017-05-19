@@ -103,8 +103,11 @@ endif()
 enable_language(CXX)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 find_package(ZLIB REQUIRED "1.0")
-include_directories(${ZLIB_INCLUDE_DIRS})
-message("zlib version: " ${ZLIB_VERSION})
+if ( ZLIB_FOUND )
+	message("zlib version: " ${ZLIB_VERSION})
+    include_directories( ${ZLIB_INCLUDE_DIRS} )
+endif( ZLIB_FOUND )
+
 
 # LIBRARY
 # -------
@@ -113,6 +116,13 @@ add_definitions(-DNOCRYPT -DNOUNCRYPT)
 
 include_directories(include include/xlsxwriter)
 file(GLOB LXW_SOURCES src/*.c)
+
+if (MSVC)
+	list(APPEND LXW_SOURCES third_party/minizip/iowin32.c third_party/minizip/unzip.c third_party/minizip/mztools.c)
+	include_directories(third_party/minizip)
+	add_definitions(-DUNICODE -D_UNICODE)
+endif()
+
 list(APPEND LXW_SOURCES third_party/minizip/ioapi.c third_party/minizip/zip.c)
 if (NOT ${USE_STANDARD_TMPFILE})
     include_directories(third_party/tmpfileplus)
@@ -125,16 +135,21 @@ set(LXW_LIB_DIR "${LXW_PROJECT_DIR}/lib")
 if(BUILD_STATIC)
     add_library(${PROJECT_NAME} STATIC ${LXW_SOURCES})
 else()
+	if (MSVC)
+		list(APPEND LXW_SOURCES XlsxWriter.def)
+	endif()
     add_library(${PROJECT_NAME} SHARED ${LXW_SOURCES})
 endif()
 
-if(MSVC)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rename
-        ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pdb
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>/${PROJECT_NAME}.pdb
-    )
-endif()
+#if(MSVC)
+#    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+#        COMMAND ${CMAKE_COMMAND} -E rename
+#        ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pdb
+#        $<TARGET_FILE_DIR:${PROJECT_NAME}>/${PROJECT_NAME}.pdb
+#    )
+#endif()
+
+target_link_libraries( ${PROJECT_NAME} ${ZLIB_LIBRARIES} )
 
 # TESTS
 # -----
@@ -222,34 +237,14 @@ if(BUILD_EXAMPLES)
 endif()
 
 # INSTALL
-# -------
+# Copied from zlib cmake
+install(TARGETS ${PROJECT_NAME}
+		RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+		ARCHIVE DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+		LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}/lib")
 
-if(MSVC)
-    if(CMAKE_CL_64)
-        install(TARGETS ${PROJECT_NAME}
-            LIBRARY DESTINATION "lib/x64/\${CMAKE_INSTALL_CONFIG_NAME}"
-            ARCHIVE DESTINATION "lib/x64/\${CMAKE_INSTALL_CONFIG_NAME}"
-        )
-        install(FILES $<TARGET_FILE_DIR:${PROJECT_NAME}>/${PROJECT_NAME}.pdb
-            DESTINATION "lib/x64/\${CMAKE_INSTALL_CONFIG_NAME}"
-        )
-    else()
-        install(TARGETS ${PROJECT_NAME}
-            LIBRARY DESTINATION "lib/Win32/\${CMAKE_INSTALL_CONFIG_NAME}"
-            ARCHIVE DESTINATION "lib/Win32/\${CMAKE_INSTALL_CONFIG_NAME}"
-        )
-        install(FILES $<TARGET_FILE_DIR:${PROJECT_NAME}>/${PROJECT_NAME}.pdb
-            DESTINATION "lib/Win32/\${CMAKE_INSTALL_CONFIG_NAME}"
-        )
-    endif()   
-else(MSVC)
-    install(TARGETS ${PROJECT_NAME}
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
-endif(MSVC)
-install(FILES include/xlsxwriter.h DESTINATION include)
+install(FILES include/xlsxwriter.h DESTINATION "${CMAKE_INSTALL_PREFIX}/include")
 install(DIRECTORY include/xlsxwriter
-    DESTINATION include
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/include"
     FILES_MATCHING PATTERN "*.h"
 )
